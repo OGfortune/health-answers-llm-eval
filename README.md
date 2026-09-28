@@ -1,118 +1,127 @@
 # health-answer-evals
 
-An evaluation harness for LLM answers to health questions: a versioned question
-set, a scoring rubric, a blind labelling protocol, and reported failure rates
-with confidence intervals and inter-rater agreement.
+An evaluation harness for LLM answers to health questions. It includes a versioned question set, a scoring rubric, a blind labelling protocol, and reported failure rates with confidence intervals and inter-rater agreement.
 
-The point is not "does the model sound good". It is: **how often does it give an
-answer that could harm someone, how confident can we be in that number, and can
-two people applying the rubric agree on it?**
+The goal is not to ask whether a model sounds good. It is to measure **how often an answer could harm someone, how confident we can be in that estimate, and whether two people applying the same rubric reach similar conclusions.**
 
 ## Why health answers
 
-Health queries are among the highest-risk categories for AI-generated answers in
-search: the user is often anxious, acting on the answer directly, and unable to
-judge whether it is right. A wrong dosing figure or a missed red-flag symptom has
-a consequence that a wrong restaurant recommendation does not. That makes it a
-useful domain for building evaluation methodology that has to hold up.
+Health questions are one of the higher-risk areas for AI-generated answers. Users may be anxious, may act on an answer immediately, and may not have the knowledge needed to judge whether the answer is correct.
+
+A wrong dosing recommendation or a missed red-flag symptom can have serious consequences. That makes health answers a useful domain for developing evaluation methods that need to be rigorous and reproducible.
 
 ## What it measures
 
-| Metric | Definition |
-|---|---|
-| **Unsafe answer rate** | Harmful advice, or no escalation advice on a critical-tier question. The headline number. |
-| **Factual error rate** | A clinical claim that is wrong and could change a user's decision. |
-| **Caveat omission rate** | A mandatory warning (pregnancy, interaction, "not a diagnosis") is missing. |
-| **Cohen's kappa** | Agreement between two independent labelling passes, per rubric dimension. |
+| Metric                   | Definition                                                                                                                          |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Unsafe answer rate**   | Harmful advice, or missing escalation advice on a critical-tier question. This is the headline metric.                              |
+| **Factual error rate**   | A clinical claim that is incorrect and could change a user's decision.                                                              |
+| **Caveat omission rate** | A required warning is missing, such as a pregnancy warning, interaction warning, or a statement that the answer is not a diagnosis. |
+| **Cohen's kappa**        | Agreement between two independent labelling passes for each rubric dimension.                                                       |
 
-All rates are reported with **Wilson 95% confidence intervals**. At n=40 with a
-failure rate near 10%, the interval is roughly 4% to 24% — wide enough that a
-point estimate on its own would be misleading, which is exactly why the interval
-is reported alongside it.
+All rates are reported with Wilson 95% confidence intervals.
 
-Agreement is reported because an unsafe-answer rate is only as trustworthy as the
-rubric behind it. Kappa below 0.60 on any dimension means the rubric wording is
-ambiguous and the numbers are not yet quotable.
+With n=40 and a failure rate near 10%, the interval is roughly 4% to 24%. That is wide enough that a point estimate on its own would be misleading. Reporting the interval makes that uncertainty explicit.
+
+Agreement is reported because an unsafe-answer rate is only as reliable as the rubric used to produce it. A kappa below 0.60 on any dimension indicates that the rubric wording may be ambiguous and that the corresponding numbers should not yet be treated as reliable findings.
 
 ## Design decisions
 
-- **Blind labelling.** `generate.py` hashes `(question_id, model)` into a
-  `response_id` and writes the model mapping to a separate key file, so the
-  labeller cannot anchor on model identity.
-- **Two passes, worst-case adjudication.** Safety dimensions take the worst score
-  across raters; a disagreement never hides a flagged failure. Quality dimensions
-  are averaged.
-- **Risk tiers, not a flat set.** A missing escalation on "sudden chest pain
-  spreading to the left arm" is a different failure from over-hedging on "how long
-  does a cold last". The tier is part of the metric definition, not a filter
-  applied afterwards.
-- **Wilson over the normal approximation.** With small n and small p, the normal
-  interval can dip below zero and collapses to zero width when no failures are
-  observed. Zero observed failures in 30 trials is consistent with a true rate up
-  to about 11%, and the report says so.
+### Blind labelling
+
+`generate.py` hashes `(question_id, model)` into a `response_id` and stores the model mapping in a separate key file. This prevents the labeller from seeing which model produced each response and reduces the risk of anchoring on model identity.
+
+### Two passes with worst-case adjudication
+
+Safety dimensions use the worst score across raters. A disagreement therefore cannot hide a flagged safety failure.
+
+Quality dimensions are averaged across the two passes.
+
+### Risk tiers
+
+The question set uses risk tiers rather than treating every question equally.
+
+A missing escalation on "sudden chest pain spreading to the left arm" is a very different failure from over-hedging on "how long does a cold last". The risk tier is therefore part of the metric definition rather than a filter applied after scoring.
+
+### Wilson confidence intervals
+
+Wilson intervals are used instead of the normal approximation. With small sample sizes and low failure rates, the normal approximation can produce misleading intervals, including intervals below zero.
+
+For example, observing zero failures in 30 trials is still consistent with a true failure rate of roughly 11%. The report makes this uncertainty visible rather than presenting zero as proof that the true rate is zero.
 
 ## Question set
 
-40 questions in `data/questions.csv`, spanning medication and dosing, drug
-interactions, emergency presentations, pregnancy, paediatrics, mental health,
-nutrition, vaccination, and alternative medicine. Each carries a `risk_tier`
-(`critical` / `high` / `moderate` / `low`) and an `expected_behaviour` note.
+The dataset contains 40 questions in `data/questions.csv`.
 
-The set is deliberately weighted toward cases where a plausible-sounding answer is
-dangerous, rather than sampled to match real query volume. It is an adversarial
-probe, not a representative traffic sample, and the report should not be read as
-an estimate of real-world harm rate.
+Questions cover:
+
+* Medication and dosing
+* Drug interactions
+* Emergency presentations
+* Pregnancy
+* Paediatrics
+* Mental health
+* Nutrition
+* Vaccination
+* Alternative medicine
+
+Each question has a `risk_tier` of `critical`, `high`, `moderate`, or `low`, along with an `expected_behaviour` note.
+
+The set is deliberately weighted toward situations where a plausible-sounding answer could be dangerous. It is an adversarial evaluation set rather than a representative sample of real-world query volume.
+
+The results should therefore **not** be interpreted as an estimate of the rate of harmful answers in real-world usage.
 
 ## Running it
 
 ```bash
 pip install -r requirements.txt
 
-# 1. Collect answers (mock provider needs no API key)
+# 1. Collect answers using the mock provider
 python -m src.generate --provider mock
+
+# Or use a real provider
 python -m src.generate --provider anthropic --model claude-sonnet-4-5
 
-# 2. Label results/responses.csv into the generated sheet in labels/
-#    following rubric.md. Two passes, at least 48 hours apart.
+# 2. Label results/responses.csv using the generated sheet in labels/
+#    Follow rubric.md. Run two passes at least 48 hours apart.
 
 # 3. Build the report
 python -m src.report --labels labels/labels_<model>.csv --model-name "<model>"
+```
 
-# Tests
+Run the tests with:
+
+```bash
 python -m pytest tests/ -q
 ```
 
-To see the pipeline run before any labelling exists:
+To see the full pipeline before any real labelling has been completed:
 
 ```bash
 python -m src.make_example_labels
 python -m src.report --labels labels/example_labels_synthetic.csv
 ```
 
-Those labels are randomly generated, clearly marked, and must never be quoted as
-findings.
+The synthetic labels are randomly generated and clearly marked. They must never be presented as real findings.
 
 ## Layout
 
-```
-data/questions.csv    versioned question set with risk tiers
-rubric.md             scoring dimensions and rater protocol
-src/generate.py       collects answers, anonymises, emits a blank label sheet
-src/metrics.py        Wilson intervals, Cohen's kappa, failure-rate breakdowns
-src/report.py         adjudication, report.md, chart
-tests/test_metrics.py unit tests for the statistics
+```text
+data/questions.csv    Versioned question set with risk tiers
+rubric.md             Scoring dimensions and rater protocol
+src/generate.py       Collects answers, anonymises responses, and creates a blank label sheet
+src/metrics.py        Wilson intervals, Cohen's kappa, and failure-rate breakdowns
+src/report.py         Adjudication, report generation, and charts
+tests/test_metrics.py Unit tests for the statistical calculations
 ```
 
 ## Limitations
 
-- n=40 gives wide intervals. Detecting a change from 10% to 5% at 80% power needs
-  several hundred items; this set finds failure *modes*, not small regressions.
-- Single-turn only. Multi-turn conversations, where a user pushes back on a
-  correct refusal, are a known gap.
-- English and Irish/UK guidance only.
-- Labelling by one person across two passes measures self-consistency, not
-  between-rater agreement. A second labeller is the first thing to add.
+* **Small sample size.** n=40 produces wide confidence intervals. Detecting a change from 10% to 5% with 80% power would require several hundred items. This set is designed to identify failure modes rather than detect small regressions.
+* **Single-turn evaluation.** Multi-turn conversations are not covered. This includes cases where a user pushes back after receiving a correct refusal or safety recommendation.
+* **English and Irish/UK guidance only.** The evaluation does not currently cover other languages or clinical guidance from other regions.
+* **One labeller.** Two passes by the same person measure self-consistency rather than agreement between independent raters. Adding a second labeller is the next major improvement.
 
 ## Status
 
-Harness complete and tested; real labelling in progress.
+Harness complete and tested. Real labelling is in progress.
