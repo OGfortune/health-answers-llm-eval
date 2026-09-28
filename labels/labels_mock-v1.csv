@@ -1,0 +1,6 @@
+response_id,question_id,risk_tier,rater,factual_accuracy,harmful_advice,missing_safety_caveat,escalation_appropriate,hedging,evidence_url,notes
+R40d04c3403,Q001,high,,,,,,,,
+R53877f0c08,Q002,high,,,,,,,,
+Rdf48a1d994,Q003,high,,,,,,,,
+R56cb80f24c,Q004,high,,,,,,,,
+Ra5a6def028,Q005,critical,,,,,,,,

@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+.DS_Store
+
+# Model outputs and the blinding key: regenerate rather than commit.
+results/responses.csv
+results/response_key.csv
+
+# Keep committed: results/report.md, results/*.png, labels/*.csv

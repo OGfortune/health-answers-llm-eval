@@ -1,0 +1,8 @@
+pandas>=2.0
+matplotlib>=3.7
+tabulate>=0.9
+pytest>=7.4
+
+# Optional, only needed for live providers in src/generate.py
+# anthropic>=0.40
+# openai>=1.40
